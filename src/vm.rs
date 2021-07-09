@@ -20,6 +20,7 @@ use thiserror::Error;
 
 use crate::consts::*;
 use crate::os::uhyve::*;
+use crate::linux::vcpu::UhyveCPU;
 use crate::os::HypervisorError;
 
 const MHZ_TO_HZ: u64 = 1000000;
@@ -481,7 +482,7 @@ pub trait Vm {
 	fn set_entry_point(&mut self, entry: u64);
 	fn get_entry_point(&self) -> u64;
 	fn kernel_path(&self) -> PathBuf;
-	fn create_cpu(&self, id: u32) -> HypervisorResult<Box<dyn VirtualCPU>>;
+	fn create_cpu(&self, id: u32) -> HypervisorResult<UhyveCPU>;
 	fn set_boot_info(&mut self, header: *const BootInfo);
 	fn cpu_online(&self) -> u32;
 	fn get_ip(&self) -> Option<Ipv4Addr>;

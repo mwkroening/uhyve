@@ -26,11 +26,16 @@ pub mod vm;
 pub use arch::*;
 use core_affinity::CoreId;
 use std::hint;
+use std::io;
+use std::net::TcpListener;
+use std::net::TcpStream;
 use std::path::PathBuf;
 use std::sync::mpsc::channel;
 use std::sync::Arc;
 use std::thread;
 use vm::Vm;
+
+use crate::vm::VirtualCPU;
 
 /// Creates a uhyve vm and runs the binary given by `path` in it.
 /// Blocks until the VM has finished execution.
@@ -62,6 +67,8 @@ pub fn uhyve_run(
 			None => None,
 		};
 
+		let gdb_port = vm_params.gdbport.unwrap() as u16;
+
 		// create thread for each CPU
 		thread::spawn(move || {
 			debug!("Create thread for CPU {}", tid);
@@ -82,16 +89,24 @@ pub fn uhyve_run(
 				hint::spin_loop();
 			}
 
+			let connection = wait_for_gdb_connection(gdb_port).unwrap();
+
+			let mut debugger = gdbstub::GdbStub::new(connection);
+
+			let res = debugger.run(&mut cpu);
+
+			panic!("{:?}", res);
+
 			// jump into the VM and execute code of the guest
-			let result = cpu.run();
-			match result {
-				Err(x) => {
-					error!("CPU {} crashes! {:?}", tid, x);
-				}
-				Ok(exit_code) => {
-					exit_tx.send(exit_code).unwrap();
-				}
-			}
+			// let result = cpu.run();
+			// match result {
+			// 	Err(x) => {
+			// 		error!("CPU {} crashes! {:?}", tid, x);
+			// 	}
+			// 	Ok(exit_code) => {
+			// 		exit_tx.send(exit_code).unwrap();
+			// 	}
+			// }
 		});
 	});
 
@@ -101,4 +116,17 @@ pub fn uhyve_run(
 	// the VCPUs externally to stop, so that the other threads don't block and
 	// can be terminated correctly.
 	exit_rx.recv().unwrap()
+}
+
+fn wait_for_gdb_connection(port: u16) -> io::Result<TcpStream> {
+	let sockaddr = format!("localhost:{}", port);
+	eprintln!("Waiting for a GDB connection on {:?}...", sockaddr);
+	let sock = TcpListener::bind(sockaddr)?;
+	let (stream, addr) = sock.accept()?;
+
+	// Blocks until a GDB client connects via TCP.
+	// i.e: Running `target remote localhost:<port>` from the GDB prompt.
+
+	eprintln!("Debugger connected from {}", addr);
+	Ok(stream) // `TcpStream` implements `gdbstub::Connection`
 }

@@ -20,11 +20,11 @@ const PCI_CONFIG_ADDRESS_PORT: u16 = 0xCF8;
 
 pub struct UhyveCPU {
 	id: u32,
-	vcpu: VcpuFd,
+	pub vcpu: VcpuFd,
 	vm_start: usize,
 	kernel_path: PathBuf,
-	tx: Option<std::sync::mpsc::SyncSender<usize>>,
-	virtio_device: Arc<Mutex<VirtioNetPciDevice>>,
+	pub tx: Option<std::sync::mpsc::SyncSender<usize>>,
+	pub virtio_device: Arc<Mutex<VirtioNetPciDevice>>,
 	pci_addr: Option<u32>,
 }
 
