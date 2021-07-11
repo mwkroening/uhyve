@@ -1,5 +1,5 @@
 use std::{path::PathBuf, process::Command};
-use uhyvelib::{uhyve_run, vm::Parameter};
+use uhyve::{uhyve_run, vm::Parameter};
 
 /// Uses Cargo to build a kernel in the `tests/test-kernels/` directory.
 /// Returns a path to the build binary.
