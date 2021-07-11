@@ -7,8 +7,6 @@ pub enum Error {
 	OsError(i32),
 	InvalidFile(String),
 	NotEnoughMemory,
-	ParseMemory,
-	InvalidArgument(String),
 	#[cfg(target_os = "linux")]
 	UnknownExitReason,
 	#[cfg(target_os = "macos")]
@@ -42,11 +40,6 @@ impl fmt::Display for Error {
 				f,
 				"The host system has not enough memory, please check your memory usage."
 			),
-			Error::ParseMemory => write!(
-				f,
-				"Couldn't parse the guest memory size from the environment"
-			),
-			Error::InvalidArgument(ref arg) => write!(f, "Invalid argument passed: {}", arg),
 			#[cfg(target_os = "linux")]
 			Error::UnknownExitReason => write!(f, "Unknown exit reason."),
 			#[cfg(target_os = "macos")]
