@@ -8,7 +8,6 @@ mod macros;
 pub mod arch;
 pub mod consts;
 pub mod debug_manager;
-pub mod error;
 pub mod gdb_parser;
 #[cfg(target_os = "linux")]
 pub mod linux;

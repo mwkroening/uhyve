@@ -310,7 +310,7 @@ fn main() {
 				let result = cpu.run();
 				match result {
 					Err(x) => {
-						error!("CPU {} crashes! {}", tid, x);
+						error!("CPU {} crashes! {:?}", tid, x);
 						None
 					}
 					Ok(exit_code) => {
