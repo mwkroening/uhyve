@@ -91,9 +91,7 @@ pub fn uhyve_run(
 					error!("CPU {} crashes! {:?}", tid, x);
 				}
 				Ok(exit_code) => {
-					if let Some(code) = exit_code {
-						exit_tx.send(code).unwrap();
-					}
+					exit_tx.send(exit_code).unwrap();
 				}
 			}
 		});
