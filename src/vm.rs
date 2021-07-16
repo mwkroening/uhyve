@@ -19,7 +19,6 @@ use std::{fs, io};
 use thiserror::Error;
 
 use crate::consts::*;
-use crate::debug_manager::DebugManager;
 use crate::os::uhyve::*;
 use crate::os::HypervisorError;
 
@@ -954,10 +953,7 @@ mod tests {
 
 #[cfg(not(target_os = "windows"))]
 pub fn create_vm(path: PathBuf, specs: &super::vm::Parameter<'_>) -> HypervisorResult<Uhyve> {
-	// If we are given a port, create new DebugManager.
-	let gdb = specs.gdbport.map(|port| DebugManager::new(port).unwrap());
-
-	let vm = Uhyve::new(path, specs, gdb)?;
+	let vm = Uhyve::new(path, specs)?;
 
 	Ok(vm)
 }

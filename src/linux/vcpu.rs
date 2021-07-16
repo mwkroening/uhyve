@@ -1,5 +1,4 @@
 use crate::consts::*;
-use crate::debug_manager::DebugManager;
 use crate::linux::virtio::*;
 use crate::linux::KVM;
 use crate::paging::*;
@@ -8,7 +7,6 @@ use crate::vm::VcpuStopReason;
 use crate::vm::VirtualCPU;
 use kvm_bindings::*;
 use kvm_ioctls::{VcpuExit, VcpuFd};
-use log::{debug, info};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use x86::controlregs::*;
@@ -28,7 +26,6 @@ pub struct UhyveCPU {
 	tx: Option<std::sync::mpsc::SyncSender<usize>>,
 	virtio_device: Arc<Mutex<VirtioNetPciDevice>>,
 	pci_addr: Option<u32>,
-	pub dbg: Option<Arc<Mutex<DebugManager>>>,
 }
 
 impl UhyveCPU {
@@ -39,7 +36,6 @@ impl UhyveCPU {
 		vm_start: usize,
 		tx: Option<std::sync::mpsc::SyncSender<usize>>,
 		virtio_device: Arc<Mutex<VirtioNetPciDevice>>,
-		dbg: Option<Arc<Mutex<DebugManager>>>,
 	) -> UhyveCPU {
 		UhyveCPU {
 			id,
@@ -49,7 +45,6 @@ impl UhyveCPU {
 			tx,
 			virtio_device,
 			pci_addr: None,
-			dbg,
 		}
 	}
 
@@ -440,14 +435,9 @@ impl VirtualCPU for UhyveCPU {
 	}
 
 	fn run(&mut self) -> HypervisorResult<i32> {
-		// Pause first CPU before first execution, so we have time to attach debugger
-		if self.id == 0 {
-			self.gdb_handle_exception(None);
-		}
-
 		loop {
 			match self.r#continue()? {
-				VcpuStopReason::Debug => self.gdb_handle_exception(Some(VcpuExit::Debug)),
+				VcpuStopReason::Debug => todo!(),
 				VcpuStopReason::Exit(code) => break Ok(code),
 			}
 		}

@@ -2,7 +2,6 @@
 //! create a Virtual Machine and load the kernel.
 
 use crate::consts::*;
-use crate::debug_manager::DebugManager;
 use crate::linux::vcpu::*;
 use crate::linux::virtio::*;
 use crate::linux::{MemoryRegion, KVM};
@@ -133,15 +132,10 @@ pub struct Uhyve {
 	mask: Option<Ipv4Addr>,
 	uhyve_device: Option<UhyveNetwork>,
 	virtio_device: Arc<Mutex<VirtioNetPciDevice>>,
-	dbg: Option<Arc<Mutex<DebugManager>>>,
 }
 
 impl Uhyve {
-	pub fn new(
-		kernel_path: PathBuf,
-		specs: &Parameter<'_>,
-		dbg: Option<DebugManager>,
-	) -> HypervisorResult<Uhyve> {
+	pub fn new(kernel_path: PathBuf, specs: &Parameter<'_>) -> HypervisorResult<Uhyve> {
 		// parse string to get IP address
 		let ip_addr = specs
 			.ip
@@ -271,7 +265,6 @@ impl Uhyve {
 			mask,
 			uhyve_device,
 			virtio_device,
-			dbg: dbg.map(|g| Arc::new(Mutex::new(g))),
 		};
 
 		hyve.init_guest_mem();
@@ -328,7 +321,6 @@ impl Vm for Uhyve {
 			vm_start,
 			tx,
 			self.virtio_device.clone(),
-			self.dbg.as_ref().cloned(),
 		)))
 	}
 

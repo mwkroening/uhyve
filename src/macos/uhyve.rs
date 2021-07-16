@@ -1,4 +1,3 @@
-use crate::debug_manager::DebugManager;
 use crate::macos::ioapic::IoApic;
 use crate::macos::vcpu::*;
 use crate::vm::HypervisorResult;
@@ -22,15 +21,10 @@ pub struct Uhyve {
 	boot_info: *const BootInfo,
 	ioapic: Arc<Mutex<IoApic>>,
 	verbose: bool,
-	dbg: Option<Arc<Mutex<DebugManager>>>,
 }
 
 impl Uhyve {
-	pub fn new(
-		kernel_path: PathBuf,
-		specs: &Parameter<'_>,
-		dbg: Option<DebugManager>,
-	) -> HypervisorResult<Uhyve> {
+	pub fn new(kernel_path: PathBuf, specs: &Parameter<'_>) -> HypervisorResult<Uhyve> {
 		let mem = unsafe {
 			libc::mmap(
 				std::ptr::null_mut(),
@@ -67,7 +61,6 @@ impl Uhyve {
 			boot_info: ptr::null(),
 			ioapic: Arc::new(Mutex::new(IoApic::new())),
 			verbose: specs.verbose,
-			dbg: dbg.map(|g| Arc::new(Mutex::new(g))),
 		};
 
 		hyve.init_guest_mem();
@@ -107,7 +100,6 @@ impl Vm for Uhyve {
 			self.path.clone(),
 			self.guest_mem as usize,
 			self.ioapic.clone(),
-			self.dbg.as_ref().cloned(),
 		)))
 	}
 

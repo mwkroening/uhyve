@@ -1,7 +1,6 @@
 #![allow(non_snake_case)]
 
 use crate::consts::*;
-use crate::debug_manager::DebugManager;
 use crate::macos::ioapic::IoApic;
 use crate::paging::*;
 use crate::vm::HypervisorResult;
@@ -69,7 +68,6 @@ pub struct UhyveCPU {
 	vm_start: usize,
 	apic_base: u64,
 	ioapic: Arc<Mutex<IoApic>>,
-	pub dbg: Option<Arc<Mutex<DebugManager>>>,
 }
 
 impl UhyveCPU {
@@ -78,7 +76,6 @@ impl UhyveCPU {
 		kernel_path: PathBuf,
 		vm_start: usize,
 		ioapic: Arc<Mutex<IoApic>>,
-		dbg: Option<Arc<Mutex<DebugManager>>>,
 	) -> UhyveCPU {
 		UhyveCPU {
 			id,
@@ -87,7 +84,6 @@ impl UhyveCPU {
 			vm_start,
 			apic_base: APIC_DEFAULT_BASE,
 			ioapic,
-			dbg,
 		}
 	}
 
@@ -731,14 +727,9 @@ impl VirtualCPU for UhyveCPU {
 	}
 
 	fn run(&mut self) -> HypervisorResult<i32> {
-		// Pause first CPU before first execution, so we have time to attach debugger
-		if self.id == 0 {
-			self.gdb_handle_exception(false);
-		}
-
 		loop {
 			match self.r#continue()? {
-				VcpuStopReason::Debug => self.gdb_handle_exception(true),
+				VcpuStopReason::Debug => todo!(),
 				VcpuStopReason::Exit(code) => break Ok(code),
 			}
 		}
