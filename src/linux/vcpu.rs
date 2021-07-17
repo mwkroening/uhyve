@@ -5,6 +5,7 @@ use crate::paging::*;
 use crate::vm::HypervisorResult;
 use crate::vm::VcpuStopReason;
 use crate::vm::VirtualCPU;
+use crate::x86_64::registers::debug::HwBreakpoints;
 use kvm_bindings::*;
 use kvm_ioctls::{VcpuExit, VcpuFd};
 use std::path::PathBuf;
@@ -26,6 +27,7 @@ pub struct UhyveCPU {
 	pub tx: Option<std::sync::mpsc::SyncSender<usize>>,
 	pub virtio_device: Arc<Mutex<VirtioNetPciDevice>>,
 	pci_addr: Option<u32>,
+	pub hw_breakpoints: HwBreakpoints,
 }
 
 impl UhyveCPU {
@@ -45,6 +47,7 @@ impl UhyveCPU {
 			tx,
 			virtio_device,
 			pci_addr: None,
+			hw_breakpoints: [None; 4],
 		}
 	}
 

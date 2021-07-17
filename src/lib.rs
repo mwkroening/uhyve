@@ -69,8 +69,6 @@ pub fn uhyve_run(
 
 		let gdb_port = vm_params.gdbport.unwrap() as u16;
 
-		// create thread for each CPU
-		thread::spawn(move || {
 			debug!("Create thread for CPU {}", tid);
 			match local_cpu_affinity {
 				Some(core_id) => {
@@ -108,7 +106,6 @@ pub fn uhyve_run(
 			// 		exit_tx.send(exit_code).unwrap();
 			// 	}
 			// }
-		});
 	});
 
 	// This is a semi-bad design. We don't wait for the other cpu's threads to

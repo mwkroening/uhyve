@@ -20,12 +20,16 @@ use kvm_bindings::kvm_guest_debug_arch;
 use kvm_bindings::KVM_GUESTDBG_ENABLE;
 use kvm_bindings::KVM_GUESTDBG_SINGLESTEP;
 use kvm_bindings::KVM_GUESTDBG_USE_HW_BP;
+use kvm_bindings::KVM_GUESTDBG_USE_SW_BP;
 use std::convert::TryInto;
 use std::slice;
+use x86_64::VirtAddr;
 
 use crate::linux::vcpu::UhyveCPU;
 use crate::vm::VcpuStopReason;
 use crate::vm::VirtualCPU;
+use crate::x86_64::registers::debug;
+use crate::x86_64::registers::debug::DebugRegisters;
 
 use super::HypervisorError;
 
@@ -63,23 +67,57 @@ impl Breakpoints for UhyveCPU {
 	}
 }
 
+impl UhyveCPU {
+	fn apply_guest_debug(&mut self, step: bool) -> Result<(), kvm_ioctls::Error> {
+		let debugreg = DebugRegisters::from(self.hw_breakpoints).0;
+		let mut control = KVM_GUESTDBG_ENABLE | KVM_GUESTDBG_USE_SW_BP | KVM_GUESTDBG_USE_HW_BP;
+		if step {
+			control |= KVM_GUESTDBG_SINGLESTEP;
+		}
+		let debug_struct = kvm_guest_debug {
+			control,
+			pad: 0,
+			arch: kvm_guest_debug_arch { debugreg },
+		};
+		self.get_vcpu().set_guest_debug(&debug_struct)
+	}
+}
+
 impl HwBreakpoint for UhyveCPU {
 	fn add_hw_breakpoint(&mut self, addr: u64, _kind: usize) -> TargetResult<bool, Self> {
-		let debug_struct = kvm_guest_debug {
-			control: KVM_GUESTDBG_ENABLE | KVM_GUESTDBG_USE_HW_BP,
-			pad: 0,
-			arch: kvm_guest_debug_arch {
-				debugreg: [addr, 0, 0, 0, 0, 0, 0, 0b11],
-			},
-		};
-		self.get_vcpu()
-			.set_guest_debug(&debug_struct)
-			.map_err(|error| TargetError::Errno(error.errno().try_into().unwrap()))?;
-		Ok(true)
+		if let Some(hw_breakpoint) = self
+			.hw_breakpoints
+			.iter_mut()
+			.find(|hw_breakpoint| hw_breakpoint.is_none())
+		{
+			hw_breakpoint.insert(debug::HwBreakpoint {
+				addr: VirtAddr::new(addr),
+				level: debug::HwBreakpointLevel::Global,
+				condition: debug::HwBreakpointCondition::InstructionExecution,
+			});
+
+			self.apply_guest_debug(false)
+				.map_err(|error| TargetError::Errno(error.errno().try_into().unwrap()))?;
+			Ok(true)
+		} else {
+			Ok(false)
+		}
 	}
 
 	fn remove_hw_breakpoint(&mut self, addr: u64, _kind: usize) -> TargetResult<bool, Self> {
-		Ok(true)
+		if let Some(hw_breakpoint) = self.hw_breakpoints.iter_mut().find(|hw_breakpoint| {
+			hw_breakpoint
+				.map(|hw_breakpoint| hw_breakpoint.addr.as_u64() == addr)
+				.unwrap_or(false)
+		}) {
+			hw_breakpoint.take();
+
+			self.apply_guest_debug(false)
+				.map_err(|error| TargetError::Errno(error.errno().try_into().unwrap()))?;
+			Ok(true)
+		} else {
+			Ok(false)
+		}
 	}
 }
 
@@ -100,12 +138,7 @@ impl SingleThreadOps for UhyveCPU {
 				}
 			}
 			ResumeAction::Step | ResumeAction::StepWithSignal(_) => {
-				let debug_struct = kvm_guest_debug {
-					control: KVM_GUESTDBG_ENABLE | KVM_GUESTDBG_SINGLESTEP,
-					..Default::default()
-				};
-				self.get_vcpu().set_guest_debug(&debug_struct)?;
-
+				self.apply_guest_debug(true)?;
 				match self.r#continue()? {
 					VcpuStopReason::Debug => Ok(StopReason::DoneStep),
 					VcpuStopReason::Exit(code) => {
