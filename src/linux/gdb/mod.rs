@@ -5,6 +5,12 @@ use gdbstub::target::ext::base::singlethread::StopReason;
 use gdbstub::target::ext::base::BaseOps;
 use gdbstub::target::ext::base::GdbInterrupt;
 use gdbstub::target::ext::base::ResumeAction;
+use gdbstub::target::ext::breakpoints::Breakpoints;
+use gdbstub::target::ext::breakpoints::BreakpointsOps;
+use gdbstub::target::ext::breakpoints::HwBreakpoint;
+use gdbstub::target::ext::breakpoints::HwBreakpointOps;
+use gdbstub::target::ext::breakpoints::HwWatchpointOps;
+use gdbstub::target::ext::breakpoints::SwBreakpointOps;
 use gdbstub::target::Target;
 use gdbstub::target::TargetError;
 use gdbstub::target::TargetResult;
@@ -13,7 +19,7 @@ use kvm_bindings::kvm_guest_debug;
 use kvm_bindings::kvm_guest_debug_arch;
 use kvm_bindings::KVM_GUESTDBG_ENABLE;
 use kvm_bindings::KVM_GUESTDBG_SINGLESTEP;
-use kvm_bindings::KVM_GUESTDBG_USE_SW_BP;
+use kvm_bindings::KVM_GUESTDBG_USE_HW_BP;
 use std::convert::TryInto;
 use std::slice;
 
@@ -32,8 +38,48 @@ impl Target for UhyveCPU {
 	// Without this annotation, LLVM might fail to dead-code-eliminate nested IDET
 	// implementations, resulting in unnecessary binary bloat.
 
+	#[inline(always)]
 	fn base_ops(&mut self) -> BaseOps<'_, Self::Arch, Self::Error> {
 		BaseOps::SingleThread(self)
+	}
+
+	#[inline(always)]
+	fn breakpoints(&mut self) -> Option<BreakpointsOps<'_, Self>> {
+		Some(self)
+	}
+}
+
+impl Breakpoints for UhyveCPU {
+	fn sw_breakpoint(&mut self) -> Option<SwBreakpointOps<'_, Self>> {
+		None
+	}
+
+	fn hw_breakpoint(&mut self) -> Option<HwBreakpointOps<'_, Self>> {
+		Some(self)
+	}
+
+	fn hw_watchpoint(&mut self) -> Option<HwWatchpointOps<'_, Self>> {
+		None
+	}
+}
+
+impl HwBreakpoint for UhyveCPU {
+	fn add_hw_breakpoint(&mut self, addr: u64, _kind: usize) -> TargetResult<bool, Self> {
+		let debug_struct = kvm_guest_debug {
+			control: KVM_GUESTDBG_ENABLE | KVM_GUESTDBG_USE_HW_BP,
+			pad: 0,
+			arch: kvm_guest_debug_arch {
+				debugreg: [addr, 0, 0, 0, 0, 0, 0, 0b11],
+			},
+		};
+		self.get_vcpu()
+			.set_guest_debug(&debug_struct)
+			.map_err(|error| TargetError::Errno(error.errno().try_into().unwrap()))?;
+		Ok(true)
+	}
+
+	fn remove_hw_breakpoint(&mut self, addr: u64, _kind: usize) -> TargetResult<bool, Self> {
+		Ok(true)
 	}
 }
 
@@ -43,22 +89,30 @@ impl SingleThreadOps for UhyveCPU {
 		action: ResumeAction,
 		gdb_interrupt: GdbInterrupt<'_>,
 	) -> Result<StopReason<u64>, Self::Error> {
-		loop {
-			let debug_struct = kvm_guest_debug {
-				// Configure the vcpu so that a KVM_DEBUG_EXIT would be generated
-				// when encountering a software breakpoint during execution
-				control: KVM_GUESTDBG_ENABLE | KVM_GUESTDBG_USE_SW_BP | KVM_GUESTDBG_SINGLESTEP,
-				pad: 0,
-				// Reset all x86-specific debug registers
-				arch: kvm_guest_debug_arch {
-					debugreg: [0, 0, 0, 0, 0, 0, 0, 0],
-				},
-			};
-			self.get_vcpu().set_guest_debug(&debug_struct).unwrap();
+		match action {
+			ResumeAction::Continue | ResumeAction::ContinueWithSignal(_) => {
+				match self.r#continue()? {
+					VcpuStopReason::Debug => Ok(StopReason::HwBreak),
+					VcpuStopReason::Exit(code) => {
+						let status = if code == 0 { 0 } else { 1 };
+						Ok(StopReason::Exited(status))
+					}
+				}
+			}
+			ResumeAction::Step | ResumeAction::StepWithSignal(_) => {
+				let debug_struct = kvm_guest_debug {
+					control: KVM_GUESTDBG_ENABLE | KVM_GUESTDBG_SINGLESTEP,
+					..Default::default()
+				};
+				self.get_vcpu().set_guest_debug(&debug_struct)?;
 
-			match self.r#continue()? {
-				VcpuStopReason::Debug => return Ok(StopReason::DoneStep),
-				VcpuStopReason::Exit(_) => todo!(),
+				match self.r#continue()? {
+					VcpuStopReason::Debug => Ok(StopReason::DoneStep),
+					VcpuStopReason::Exit(code) => {
+						let status = if code == 0 { 0 } else { 1 };
+						Ok(StopReason::Exited(status))
+					}
+				}
 			}
 		}
 	}

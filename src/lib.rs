@@ -95,7 +95,8 @@ pub fn uhyve_run(
 
 			let res = debugger.run(&mut cpu);
 
-			panic!("{:?}", res);
+			dbg!(res.unwrap());
+			exit_tx.send(0).unwrap();
 
 			// jump into the VM and execute code of the guest
 			// let result = cpu.run();
